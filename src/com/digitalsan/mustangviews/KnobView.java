@@ -19,7 +19,10 @@ import android.view.View;
 
 public class KnobView extends View {
 
-	//Context
+	//User Options
+	private boolean rotateCenter = false;
+	
+	//Activity Context
 	Context mContext;
 	
 	// Center point of the view,
@@ -36,14 +39,24 @@ public class KnobView extends View {
 	
 	//Click Sounds
 	SoundPool soundPool;
-	int sound;
-
-
+	int sound;	//Resource id of sound
 
 	//Number of notches on dial
 	int notchCount = 10;
-
-
+	
+	//The number of actual 'clicks;
+	//the dial has, aka: number of 
+	//positions dial will snap to
+	int clickCount = 10;
+	double degPerClick = 360/clickCount;
+	
+	//How many degrees the user
+	//must move, before animation 
+	//happens, this is different from
+	//actually triggering an event
+	int degsToRotate = 2;
+	
+	
 	public KnobView(Context context, AttributeSet attrs, int defStyleAttr) {
 		super(context, attrs, defStyleAttr);
 		mContext = context;
@@ -103,10 +116,7 @@ public class KnobView extends View {
 		circleTextPaint.setAntiAlias(true);
 		circleTextPaint.setTextAlign(Align.CENTER);
 		circleTextPaint.setTextSize(60);
-		
-
 	}
-
 
 	@Override
 	protected void onDraw(Canvas canvas) {
@@ -114,38 +124,48 @@ public class KnobView extends View {
 		//super.onDraw(canvas);
 	}
 
-
 	protected void drawKnob(Canvas canvas){
 		canvas.save();
+		
+		// Should the canvas simulate rotation
+		// Was display invalidated by user spinning
+		// the dial?
 		if( rotateKnob ){
-			canvas.rotate(lastCalcAngle, centerPoint, centerPoint);
+			lastDrawAngle+=animAngleDelta;
+			canvas.rotate( (float)lastDrawAngle, centerPoint, centerPoint );
 		}
-		
-		
+			
 		// Square so both sides same dimensions
-		int sideCanvasDims = canvas.getHeight();
+		int sideCanvasDims = Math.min(canvas.getHeight(), canvas.getWidth());
 		int centerOfCanvas = sideCanvasDims/2;
+		
+		//Draw background of circle and ring around circle
 		canvas.drawCircle(centerOfCanvas, centerOfCanvas, centerOfCanvas, circleBackPaint);
 		canvas.drawCircle(centerOfCanvas, centerOfCanvas, centerOfCanvas, circleOutlinePaint);
 
+		//Number of degrees to rotate for
+		//each notch drawn on circle
 		int rotateDegress = 360/notchCount;
 
+		//Length of line that draws the notch
 		int notchSize = centerOfCanvas/3;
-		//canvas.save();
+		
+		//Draw each notch
 		for(int i=0; i<notchCount; i++){
 			canvas.drawLine(centerOfCanvas, notchSize, centerOfCanvas, notchSize*2, circleNotchPaint);
 			canvas.rotate(rotateDegress,centerOfCanvas,centerOfCanvas);
 		}
-		canvas.restore();
 		
-		//Draw center that does not spin
+		//Draw center depending on user preference
+		if( !rotateCenter){
+			canvas.restore();
+		}
+		
 		canvas.drawCircle(centerOfCanvas, centerOfCanvas, notchSize, circleCenterPaint);
 		canvas.drawText("VOLUME", centerOfCanvas, centerOfCanvas, circleTextPaint);
 		
-
-		//Debugging
-		//drawLinkingLine(canvas);
-		//drawOuter(canvas);
+		canvas.restore();
+		return;
 	}
 
 
@@ -172,7 +192,6 @@ public class KnobView extends View {
 			Log.d("SeekButton", "UNSPECIFIED ON BOTH PASSED TO US: Width:" + getMeasuredWidth() + "  Height:" + getMeasuredHeight());
 			return;
 		} 
-
 
 		//What both sides should be set to
 		int heightSideDims, widthSideDims;
@@ -209,74 +228,71 @@ public class KnobView extends View {
 	}
 
 
-	private Point downPoint, upPoint;
-	private Point startOuterPoint;
-	private boolean drawLink = false;
-	private int drawAngle = 0;
-	private int lastCalcAngle = 0;
 	private boolean rotateKnob=false;
+	private double lastCalcAngle = 0;
+	private double lastAnimAngle = 0;
+	private double lastDrawAngle = 0;
+	private double animAngleDelta = 0;
 	@Override
 	public boolean onTouchEvent(MotionEvent event) {
-		// TODO Auto-generated method stub
-
-
-
-		if( event.getAction() == MotionEvent.ACTION_MOVE || event.getAction() == MotionEvent.ACTION_MOVE){
-			//Calculate distance from center
-			float xPoint = Math.abs(centerPoint -  event.getX());
-			float yPoint = Math.abs(centerPoint -  event.getY());
-			double cDistance = Math.sqrt( (xPoint*xPoint) + (yPoint*yPoint) );	
-			//Log.d("digitalsan", "DOWN Distance from center:" + (int)cDistance);
-
-			downPoint = new Point();
-			upPoint = new Point();
-
-			downPoint.x = (int)event.getX();
-			downPoint.y = (int)event.getY();
-
-
-
-
-			double xDistCent = downPoint.x - centerPoint;
-			double yDistCent = centerPoint - downPoint.y;
+		
+		//We do similar processing for DOWN and MOVE actions
+		//Some processing is unique for each event and
+		//specified within this if block
+		if( event.getAction() == MotionEvent.ACTION_MOVE || 
+				event.getAction() == MotionEvent.ACTION_DOWN){
+			
+			//Calculate rotation in rads
+			double xDistCent = event.getX() - centerPoint;
+			double yDistCent = centerPoint - event.getY();
 			double atan = Math.atan2(xDistCent, yDistCent);
 
-
+			//Calculate the angle in degrees
+			//In degrees to use with rotating
+			//the canvas when drawing.
 			double angle = Math.toDegrees(atan);
 			if(angle < 0){
 				angle += 360;
 			}
 
-			if(event.getAction() == MotionEvent.ACTION_DOWN ||  Math.abs( angle - lastCalcAngle ) >5 ){
-				lastCalcAngle = (int) angle;
-				Log.d("digitalsan", "Point on cartesian plain: " + xDistCent + " - " + yDistCent);
-				Log.d("digitalsan", "Tangent: " + atan);
-				Log.d("digitalsan", "Degrees: " + angle);
+			//Store where user touched
+			//Used to determine initial point point so wheel
+			//doesn't 'jump' when touched.
+			if( event.getAction() == MotionEvent.ACTION_DOWN ){
+				lastAnimAngle = angle;
+				return true;
+			}
+			
+			//Get delta since between current angle
+			//and the angle last time we animated the wheel
+			animAngleDelta = angle - lastAnimAngle;
+			
+			//If user rotated enough,
+			//trigger an animation of
+			//the dial
+			if( Math.abs(animAngleDelta) > 1 ){
+				lastAnimAngle = angle;
 				rotateKnob=true;
 				invalidate();
+			}
+				
+			//Get delta since between current angle
+			//and the angle last time the wheel 'snapped'
+			//to a fixed spot
+			double clickAngleDelta = Math.abs( angle - lastCalcAngle );
+			
+			//If user rotated enough,
+			//trigger a 'snap' to next point
+			// on the wheel
+			if( clickAngleDelta >  degPerClick ){
+				lastCalcAngle = angle;
 				soundPool.play(sound, 1.0f, 1.0f, 1, 0, 1);
 			}
-			//-----------------------------------------------------
-
-			drawLink = false;
-			invalidate();
-			//Log.d("digitalsan", "Outer circumfrence point:" + (int)startOuterPoint.x + " - " + (int)startOuterPoint.y);
-
 			return true;
 		}
 
 
 		if( event.getAction() == MotionEvent.ACTION_UP ){
-			//Calculate distance from center
-			float xPoint = Math.abs(centerPoint -  event.getX());
-			float yPoint = Math.abs(centerPoint -  event.getY());
-			double cDistance = Math.sqrt( (xPoint*xPoint) + (yPoint*yPoint) );
-			Log.d("digitalsan", "UP Distance from center:" + (int)cDistance + "\n");
-
-			upPoint.x = (int)event.getX();
-			upPoint.y = (int)event.getY();
-			drawLink = true;
-
 			invalidate();
 			return true;
 		}
@@ -285,21 +301,23 @@ public class KnobView extends View {
 		return true;
 	}
 
-
-	private void drawOuter(Canvas canvas){
-		if(startOuterPoint == null)
-			return;
-
-		canvas.drawCircle(startOuterPoint.x, startOuterPoint.y, 50f, circleLinkPaint);
+	//USER OPTION GETTERS/SETTERS Below
+	public boolean getRotateCenter() {
+		return rotateCenter;
 	}
 
-	private void drawLinkingLine(Canvas canvas){
-		if(downPoint ==null || upPoint==null || !drawLink)
-			return;
-
-		canvas.drawLine(downPoint.x, downPoint.y, upPoint.x, upPoint.y, circleLinkPaint);	
+	public void setRotateCenter(boolean rotateCenter) {
+		this.rotateCenter = rotateCenter;
 	}
 
 
 
 }
+
+
+
+/** Storage
+ * 				Log.d("digitalsan", "Point on cartesian plain: " + xDistCent + " - " + yDistCent);
+				Log.d("digitalsan", "Tangent: " + atan);
+				Log.d("digitalsan", "Degrees: " + angle);
+**/
