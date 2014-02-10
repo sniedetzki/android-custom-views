@@ -1,23 +1,25 @@
 package com.digitalsan.mustangviews;
 
 
-import com.digitalsan.android_mustang_views.R;
-
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Paint.Align;
+import android.graphics.Paint.Cap;
 import android.graphics.Paint.Style;
-import android.graphics.Point;
 import android.media.AudioManager;
 import android.media.SoundPool;
 import android.util.AttributeSet;
 import android.util.Log;
+import android.view.GestureDetector.OnGestureListener;
 import android.view.MotionEvent;
 import android.view.View;
+import android.widget.Toast;
 
-public class KnobView extends View {
+import com.digitalsan.android_mustang_views.R;
+
+public class KnobView extends View implements OnGestureListener{
 
 	//User Options
 	private boolean rotateCenter = false;
@@ -98,6 +100,7 @@ public class KnobView extends View {
 		circleNotchPaint.setColor(Color.BLACK);
 		circleNotchPaint.setStrokeWidth(30);
 		circleNotchPaint.setAntiAlias(true);
+		circleNotchPaint.setStrokeCap(Cap.ROUND);
 
 		circleLinkPaint = new Paint();
 		circleLinkPaint.setStyle(Style.STROKE);
@@ -127,22 +130,31 @@ public class KnobView extends View {
 	protected void drawKnob(Canvas canvas){
 		canvas.save();
 		
+		// Square so both sides same dimensions
+		//int sideCanvasDims = Math.min(canvas.getHeight(), canvas.getWidth());
+		int sideCanvasDims = Math.min(canvas.getClipBounds().width(), canvas.getClipBounds().height());
+		int centerOfCanvas = sideCanvasDims/2;
+		
+		//Get width of outline, we need to compensate for this
+		//when we draw the outline, otherwise some of the outline
+		//will exceed the canvas bounds, creating square in certain
+		//spot on the the circle
+		float outlineCompensation = circleOutlinePaint.getStrokeWidth() / 2;
+		float outlineRadius = centerOfCanvas - outlineCompensation;
+		
 		// Should the canvas simulate rotation
 		// Was display invalidated by user spinning
-		// the dial?
+		// the dial?		MotionEvent.action_	
 		if( rotateKnob ){
 			lastDrawAngle+=animAngleDelta;
-			canvas.rotate( (float)lastDrawAngle, centerPoint, centerPoint );
-		}
-			
-		// Square so both sides same dimensions
-		int sideCanvasDims = Math.min(canvas.getHeight(), canvas.getWidth());
-		int centerOfCanvas = sideCanvasDims/2;
+			canvas.rotate( (float)lastDrawAngle, centerOfCanvas, centerOfCanvas );
+			rotateKnob = false;
+		}		
 		
 		//Draw background of circle and ring around circle
 		canvas.drawCircle(centerOfCanvas, centerOfCanvas, centerOfCanvas, circleBackPaint);
-		canvas.drawCircle(centerOfCanvas, centerOfCanvas, centerOfCanvas, circleOutlinePaint);
-
+		canvas.drawCircle(centerOfCanvas, centerOfCanvas, outlineRadius, circleOutlinePaint);
+		
 		//Number of degrees to rotate for
 		//each notch drawn on circle
 		int rotateDegress = 360/notchCount;
@@ -298,7 +310,7 @@ public class KnobView extends View {
 		}
 
 		super.onTouchEvent(event);
-		return true;
+		return false;
 	}
 
 	//USER OPTION GETTERS/SETTERS Below
@@ -308,6 +320,46 @@ public class KnobView extends View {
 
 	public void setRotateCenter(boolean rotateCenter) {
 		this.rotateCenter = rotateCenter;
+	}
+
+	//Gesture detection
+	
+	@Override
+	public boolean onDown(MotionEvent e) {
+		// TODO Auto-generated method stub
+		return false;
+	}
+
+	@Override
+	public boolean onFling(MotionEvent e1, MotionEvent e2, float velocityX,
+			float velocityY) {
+		Toast.makeText(mContext, "Fling!", Toast.LENGTH_SHORT).show();
+		return false;
+	}
+
+	@Override
+	public void onLongPress(MotionEvent e) {
+		// TODO Auto-generated method stub
+		
+	}
+
+	@Override
+	public boolean onScroll(MotionEvent e1, MotionEvent e2, float distanceX,
+			float distanceY) {
+		// TODO Auto-generated method stub
+		return false;
+	}
+
+	@Override
+	public void onShowPress(MotionEvent e) {
+		// TODO Auto-generated method stub
+		
+	}
+
+	@Override
+	public boolean onSingleTapUp(MotionEvent e) {
+		// TODO Auto-generated method stub
+		return false;
 	}
 
 
